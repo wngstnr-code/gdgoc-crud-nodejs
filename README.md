@@ -133,7 +133,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 **Penjelasan:**
 - `GoogleGenerativeAI` - Class dari SDK Google untuk mengakses Gemini AI
 - `process.env.GEMINI_API_KEY` - API Key disimpan di file `.env` untuk keamanan
-- `gemini-2.0-flash` - Model Gemini yang digunakan (cepat dan efisien)
+- `gemini-2.5-pro` - Model Gemini yang digunakan (cepat dan efisien)
 
 ### **generateBio()** - Function untuk Generate Bio dengan AI
 ```javascript
