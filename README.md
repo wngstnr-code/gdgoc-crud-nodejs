@@ -2,11 +2,11 @@
 
 ## 1. Deskripsi Singkat Program
 
-Program ini adalah **REST API CRUD (Create, Read, Update, Delete)** sederhana untuk manajemen data user menggunakan **Node.js** dan **MongoDB**. API ini memungkinkan pengguna untuk melakukan operasi:
-- Membuat user baru
+Program ini adalah **REST API CRUD (Create, Read, Update, Delete)** sederhana untuk manajemen data user menggunakan **Node.js** dan **MongoDB** dengan integrasi **Google Gemini AI** untuk auto-generate bio user. API ini memungkinkan pengguna untuk melakukan operasi:
+- Membuat user baru (dengan bio yang di-generate otomatis oleh AI)
 - Melihat semua user
 - Melihat detail user berdasarkan ID
-- Mengupdate data user
+- Mengupdate data user (bio akan di-regenerate jika name/age berubah)
 - Menghapus user
 
 ---
@@ -14,14 +14,19 @@ Program ini adalah **REST API CRUD (Create, Read, Update, Delete)** sederhana un
 ## 2. Framework & Library yang Digunakan
 
 ### Dependencies:
-- **Express.js (v5.1.0)** - Framework web untuk membuat REST API
-- **Mongoose (v9.0.0)** - ODM (Object Data Modeling) untuk MongoDB
-- **MongoDB (v7.0.0)** - Driver MongoDB native
-- **Body-parser (v2.2.1)** - Middleware untuk parsing request body
-- **Dotenv (v17.2.3)** - Mengelola environment variables
+| Library | Versi | Fungsi |
+|---------|-------|--------|
+| **Express.js** | v5.1.0 | Framework web untuk membuat REST API |
+| **Mongoose** | v9.0.0 | ODM (Object Data Modeling) untuk MongoDB |
+| **MongoDB** | v7.0.0 | Driver MongoDB native |
+| **Body-parser** | v2.2.1 | Middleware untuk parsing request body |
+| **Dotenv** | v17.2.3 | Mengelola environment variables |
+| **@google/generative-ai** | v0.24.1 | SDK untuk integrasi Google Gemini AI |
 
 ### DevDependencies:
-- **Nodemon (v3.1.11)** - Auto-restart server saat ada perubahan file
+| Library | Versi | Fungsi |
+|---------|-------|--------|
+| **Nodemon** | v3.1.11 | Auto-restart server saat ada perubahan file |
 
 ---
 
@@ -86,7 +91,8 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema({
     name: {type: String, required: true},
     email: {type: String, required: true, unique: true},
-    age: {type: Number, required: true}
+    age: {type: Number, required: true},
+    bio: {type: String}
 })
 
 // Export model User berdasarkan schema
@@ -94,10 +100,14 @@ export default mongoose.model("User", userSchema);
 ```
 
 **Penjelasan:**
+| Field | Tipe | Keterangan |
+|-------|------|------------|
+| **name** | String | Wajib diisi (`required: true`) |
+| **email** | String | Wajib diisi dan harus unik (`unique: true`) |
+| **age** | Number | Wajib diisi |
+| **bio** | String | Opsional, di-generate otomatis oleh Gemini AI |
+
 - `mongoose.Schema()` - Mendefinisikan struktur data user
-- **name** - String, wajib diisi (`required: true`)
-- **email** - String, wajib diisi, dan harus unik (`unique: true`)
-- **age** - Number, wajib diisi
 - `mongoose.model("User", userSchema)` - Membuat model bernama "User" yang akan menjadi collection "users" di MongoDB
 - `unique: true` - Memastikan tidak ada duplikasi email di database
 
@@ -105,13 +115,53 @@ export default mongoose.model("User", userSchema);
 
 ## 5. Penjelasan `userController.js`
 
-File ini berisi **business logic** untuk semua operasi CRUD.
+File ini berisi **business logic** untuk semua operasi CRUD dengan integrasi **Google Gemini AI**.
 
-### **createUser** - Membuat user baru
+### **Inisialisasi Gemini AI**
+```javascript
+import User from "../model/userModel.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+// Inisialisasi Gemini AI dengan API Key dari environment variable
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+```
+
+**Penjelasan:**
+- `GoogleGenerativeAI` - Class dari SDK Google untuk mengakses Gemini AI
+- `process.env.GEMINI_API_KEY` - API Key disimpan di file `.env` untuk keamanan
+- `gemini-2.0-flash` - Model Gemini yang digunakan (cepat dan efisien)
+
+### **generateBio()** - Function untuk Generate Bio dengan AI
+```javascript
+async function generateBio(name, age) {
+    try {
+        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun). Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
+        
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error("Gemini Error:", error.message);
+        return `${name} adalah pengguna berusia ${age} tahun.`;
+    }
+}
+```
+
+**Penjelasan:**
+- `prompt` - Instruksi yang dikirim ke Gemini AI untuk generate bio
+- `model.generateContent(prompt)` - Mengirim request ke Gemini AI
+- `response.text().trim()` - Mengambil teks hasil dan menghapus spasi berlebih
+- Jika error, akan mengembalikan bio default sebagai fallback
+
+### **createUser** - Membuat user baru dengan AI-generated bio
 ```javascript
 export const createUser = async (req, res) => {
     try {
-        const newUser = new User(req.body); // Ambil data dari request body
+        const newUser = new User(req.body);
         const {email} = newUser;
 
         // Cek apakah email sudah terdaftar
@@ -119,6 +169,10 @@ export const createUser = async (req, res) => {
         if (userExist) {
             return res.status(400).json({errorMessage: "User with this email already exists"});
         }
+
+        // Generate bio menggunakan Gemini AI
+        const aiGeneratedBio = await generateBio(newUser.name, newUser.age);
+        newUser.bio = aiGeneratedBio;
 
         // Simpan user baru ke database
         const saveData = await newUser.save();
@@ -134,7 +188,7 @@ export const createUser = async (req, res) => {
 ```javascript
 export const getAllUsers = async (req, res) => {
     try {
-        const userData = await User.find(); // Ambil semua user dari database
+        const userData = await User.find();
         
         if (!userData || userData.length === 0) {
             res.status(404).json({message: "Users data Not Found"});
@@ -152,8 +206,8 @@ export const getAllUsers = async (req, res) => {
 ```javascript
 export const getUserById = async (req, res) => {
     try {
-        const id = req.params.id; // Ambil ID dari URL parameter
-        const userExist = await User.findById(id); // Cari user berdasarkan ID
+        const id = req.params.id;
+        const userExist = await User.findById(id);
 
         if(!userExist) {
             return res.status(404).json({message: "User Not Found"});
@@ -167,7 +221,7 @@ export const getUserById = async (req, res) => {
 }
 ```
 
-### **updateUser** - Update data user
+### **updateUser** - Update data user dengan regenerate bio
 ```javascript
 export const updateUser = async (req, res) => {
     try {
@@ -178,7 +232,14 @@ export const updateUser = async (req, res) => {
             return res.status(404).json({message: "User Not Found"});
         }
 
-        // Update dan return data terbaru dengan {new: true}
+        // Regenerate bio jika name atau age berubah
+        if (req.body.name || req.body.age) {
+            const updatedName = req.body.name || userExist.name;
+            const updatedAge = req.body.age || userExist.age;
+            
+            req.body.bio = await generateBio(updatedName, updatedAge);
+        }
+
         const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});
         res.status(200).json(updatedData);
 
@@ -199,7 +260,7 @@ export const deleteUser = async (req, res) => {
             return res.status(404).json({message: "User Not Found"});
         }
 
-        await User.findByIdAndDelete(id); // Hapus user dari database
+        await User.findByIdAndDelete(id);
         res.status(200).json({message: "User Deleted Successfully"});
 
     } catch (error) {
@@ -208,8 +269,8 @@ export const deleteUser = async (req, res) => {
 }
 ```
 
-**Penjelasan:**
-- `async/await` - Digunakan untuk operasi asynchronous ke database
+**Penjelasan Umum:**
+- `async/await` - Digunakan untuk operasi asynchronous ke database dan API
 - `try/catch` - Error handling
 - `req.body` - Data yang dikirim dari client
 - `req.params.id` - ID dari URL parameter
@@ -261,4 +322,133 @@ export default route;
 - **DELETE** `/api/delete/user/:id` - Endpoint untuk delete user
 
 ---
+
+## 7. Cara Menjalankan
+
+### Langkah 1: Install Dependencies
+```bash
+cd server
+npm install
+```
+
+### Langkah 2: Buat File `.env`
+```env
+PORT=4000
+MONGODB_URL=mongodb://localhost:27017/crud-nodejs
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### Langkah 3: Dapatkan Gemini API Key
+1. Buka: https://aistudio.google.com/app/apikey
+2. Login dengan Google Account
+3. Klik "Create API Key"
+4. Copy API Key dan paste ke `.env`
+
+### Langkah 4: Jalankan Server
+```bash
+npm run dev
+```
+
+---
+
+## 8. API Endpoints
+
+| Method | Endpoint | Deskripsi |
+|--------|----------|-----------|
+| POST | `/api/user` | Membuat user baru (bio auto-generated) |
+| GET | `/api/users` | Mengambil semua user |
+| GET | `/api/user/:id` | Mengambil user berdasarkan ID |
+| PUT | `/api/update/user/:id` | Update user (bio regenerated jika name/age berubah) |
+| DELETE | `/api/delete/user/:id` | Hapus user |
+
+---
+
+## 9. Contoh Request & Response
+
+### Create User
+**Request:**
+```http
+POST http://localhost:4000/api/user
+Content-Type: application/json
+
+{
+    "name": "Budi Santoso",
+    "email": "budi@example.com",
+    "age": 20
+}
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Budi Santoso",
+    "email": "budi@example.com",
+    "age": 20,
+    "bio": "Budi Santoso, 20 tahun, hobinya rebahan sambil scroll TikTok sampai lupa waktu."
+}
+```
+
+### Update User
+**Request:**
+```http
+PUT http://localhost:4000/api/update/user/507f1f77bcf86cd799439011
+Content-Type: application/json
+
+{
+    "age": 21
+}
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Budi Santoso",
+    "email": "budi@example.com",
+    "age": 21,
+    "bio": "Budi Santoso, si 21 tahun yang masih bingung antara lanjut kuliah atau jadi sultan."
+}
+```
+
+---
+
+## 10. Struktur Folder
+
+```
+gdgoc-crud-nodejs/
+└── server/
+    ├── .env                    # Environment variables
+    ├── package.json            # Dependencies
+    ├── server.js               # Entry point
+    ├── controller/
+    │   └── userController.js   # Business logic + Gemini AI
+    ├── model/
+    │   └── userModel.js        # MongoDB Schema
+    └── routes/
+        └── userRoutes.js       # API Endpoints
+```
+
+---
+
+## 11. Fitur Utama
+
+✅ **CRUD Operations** - Create, Read, Update, Delete user  
+✅ **AI-Generated Bio** - Bio otomatis di-generate oleh Gemini AI  
+✅ **Auto-Regenerate Bio** - Bio di-update otomatis saat name/age berubah  
+✅ **Email Validation** - Tidak boleh ada email duplikat  
+✅ **Error Handling** - Penanganan error yang baik  
+✅ **Fallback Bio** - Jika AI error, akan menggunakan bio default
+
+---
+
+## 12. Author
+
+**Wangsit Nursyahada**
+
+---
+
+## 13. License
+
+ISC
 
