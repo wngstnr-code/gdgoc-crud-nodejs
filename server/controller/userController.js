@@ -1,4 +1,24 @@
 import User from "../model/userModel.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+
+async function generateBio(name, age) {
+    try {
+        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun). Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
+        
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        return response.text().trim();
+    } catch (error) {
+        console.error("Gemini Error:", error.message);
+        return `${name} adalah pengguna berusia ${age} tahun.`;
+    }
+}
 
 export const createUser = async (req, res) => {
     try {
@@ -9,6 +29,9 @@ export const createUser = async (req, res) => {
         if (userExist) {
             return res.status(400).json({errorMessage: "User with this email already exists"});
         }
+
+        const aiGeneratedBio = await generateBio(newUser.name, newUser.age);
+        newUser.bio = aiGeneratedBio;
 
         const saveData = await newUser.save();
         res.status(200).json(saveData);
@@ -55,6 +78,13 @@ export const updateUser = async (req, res) => {
 
         if(!userExist) {
             return res.status(404).json({message: "User Not Found"});
+        }
+
+        if (req.body.name || req.body.age) {
+            const updatedName = req.body.name || userExist.name;
+            const updatedAge = req.body.age || userExist.age;
+            
+            req.body.bio = await generateBio(updatedName, updatedAge);
         }
 
         const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});

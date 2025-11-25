@@ -13,6 +13,7 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "body-parser": "^2.2.1",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
