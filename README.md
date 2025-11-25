@@ -6,8 +6,10 @@ Program ini adalah **REST API CRUD (Create, Read, Update, Delete)** sederhana un
 - Membuat user baru (dengan bio yang di-generate otomatis oleh AI)
 - Melihat semua user
 - Melihat detail user berdasarkan ID
-- Mengupdate data user (bio akan di-regenerate jika name/age berubah)
+- Mengupdate data user (bio akan di-regenerate jika name/age/address berubah)
 - Menghapus user
+
+**🌍 Fitur Baru:** Bio akan di-generate dalam bahasa resmi sesuai negara yang di-input pada field `address`.
 
 ---
 
@@ -92,6 +94,7 @@ const userSchema = new mongoose.Schema({
     name: {type: String, required: true},
     email: {type: String, required: true, unique: true},
     age: {type: Number, required: true},
+    address: {type: String, required: true},
     bio: {type: String}
 })
 
@@ -105,6 +108,7 @@ export default mongoose.model("User", userSchema);
 | **name** | String | Wajib diisi (`required: true`) |
 | **email** | String | Wajib diisi dan harus unik (`unique: true`) |
 | **age** | Number | Wajib diisi |
+| **address** | String | Wajib diisi, menentukan bahasa bio yang di-generate |
 | **bio** | String | Opsional, di-generate otomatis oleh Gemini AI |
 
 - `mongoose.Schema()` - Mendefinisikan struktur data user
@@ -135,27 +139,47 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 - `process.env.GEMINI_API_KEY` - API Key disimpan di file `.env` untuk keamanan
 - `gemini-2.5-pro` - Model Gemini yang digunakan (cepat dan efisien)
 
-### **generateBio()** - Function untuk Generate Bio dengan AI
+### **generateBio()** - Function untuk Generate Bio dengan AI (Multi-Bahasa)
 ```javascript
-async function generateBio(name, age) {
+async function generateBio(name, age, address) {
     try {
-        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun). Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
+        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun) yang tinggal di ${address}. Tulis bio dalam bahasa resmi negara ${address}. Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
         
         const result = await model.generateContent(prompt);
         const response = result.response;
         return response.text().trim();
     } catch (error) {
         console.error("Gemini Error:", error.message);
-        return `${name} adalah pengguna berusia ${age} tahun.`;
+        return `${name} adalah pengguna berusia ${age} tahun dan tinggal di ${address}.`;
     }
 }
 ```
 
 **Penjelasan:**
-- `prompt` - Instruksi yang dikirim ke Gemini AI untuk generate bio
+- `prompt` - Instruksi yang dikirim ke Gemini AI untuk generate bio dalam bahasa sesuai negara
 - `model.generateContent(prompt)` - Mengirim request ke Gemini AI
 - `response.text().trim()` - Mengambil teks hasil dan menghapus spasi berlebih
 - Jika error, akan mengembalikan bio default sebagai fallback
+
+**Contoh Output Berdasarkan Negara:**
+| Address | Bahasa | Contoh Bio |
+|---------|--------|------------|
+| Indonesia | Indonesia | "Budi, 20 tahun, hobinya rebahan sambil ngemil kerupuk." |
+| Japan | Jepang | "田中、25歳、趣味はラーメンを食べながらアニメを見ること。" |
+| Korea | Korea | "김, 22살, 취미는 치킨 먹으며 K-드라마 정주행하기." |
+| France | Prancis | "Pierre, 30 ans, adore manger des croissants devant Netflix." |
+| Germany | Jerman | "Hans, 28 Jahre alt, liebt Bier trinken und Fußball schauen." |
+| Spain | Spanyol | "Carlos, 35 años, amante de la paella y el fútbol." |
+| Italy | Italia | "Giovanni, 40 anni, appassionato di pasta e opera." |
+| Netherlands | Belanda | "Jan, 50 jaar, houdt van fietsen en stroopwafels." |
+| Portugal | Portgual | "João, 45 anos, fã de bacalhau e fado." |
+| Russia | Rusia | "Ivan, 55 лет, любит борщ и хоккей." |
+| Thailand | Thailand | "Somchai, 60 ปี, ชอบกินต้มยำและดูละครไทย." |
+| Vietnam | Vietnam | "Nguyễn, 25 tuổi, thích ăn phở và nghe nhạc V-pop." |
+| Malaysia | Malaysia | "Ahmad, 30 tahun, penggemar nasi lemak dan bola sepak." |
+| United States | Inggris | "John, 28 years old, loves burgers and watching NFL." |
+| United Kingdom | Inggris | "Oliver, 32 years old, enjoys fish and chips and rugby." |
+| *dan negara lainnya* | *Bahasa resmi negara tersebut* |
 
 ### **createUser** - Membuat user baru dengan AI-generated bio
 ```javascript
@@ -170,8 +194,8 @@ export const createUser = async (req, res) => {
             return res.status(400).json({errorMessage: "User with this email already exists"});
         }
 
-        // Generate bio menggunakan Gemini AI
-        const aiGeneratedBio = await generateBio(newUser.name, newUser.age);
+        // Generate bio menggunakan Gemini AI dengan parameter address
+        const aiGeneratedBio = await generateBio(newUser.name, newUser.age, newUser.address);
         newUser.bio = aiGeneratedBio;
 
         // Simpan user baru ke database
@@ -233,15 +257,16 @@ export const updateUser = async (req, res) => {
             return res.status(404).json({message: "User Not Found"});
         }
 
-        // Regenerate bio jika name atau age berubah
-        if (req.body.name || req.body.age) {
-            const updatedName = req.body.name || userExist.name; //Gunakan nilai baru, atau nilai lama jika tidak ada
-            const updatedAge = req.body.age || userExist.age; //Gunakan nilai baru, atau nilai lama jika tidak ada
+        // Regenerate bio jika name, age, atau address berubah
+        if (req.body.name || req.body.age || req.body.address) {
+            const updatedName = req.body.name || userExist.name;
+            const updatedAge = req.body.age || userExist.age;
+            const updatedAddress = req.body.address || userExist.address;
             
-            req.body.bio = await generateBio(updatedName, updatedAge);
+            req.body.bio = await generateBio(updatedName, updatedAge, updatedAddress);
         }
 
-        const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});//	Return dokumen yang sudah diupdate (bukan yang lama)
+        const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});
         res.status(200).json(updatedData);
 
     } catch (error) {
@@ -356,17 +381,17 @@ npm run dev
 
 | Method | Endpoint | Deskripsi |
 |--------|----------|-----------|
-| POST | `/api/user` | Membuat user baru (bio auto-generated) |
+| POST | `/api/user` | Membuat user baru (bio auto-generated sesuai bahasa negara) |
 | GET | `/api/users` | Mengambil semua user |
 | GET | `/api/user/:id` | Mengambil user berdasarkan ID |
-| PUT | `/api/update/user/:id` | Update user (bio regenerated jika name/age berubah) |
+| PUT | `/api/update/user/:id` | Update user (bio regenerated jika name/age/address berubah) |
 | DELETE | `/api/delete/user/:id` | Hapus user |
 
 ---
 
 ## 9. Contoh Request & Response
 
-### Create User
+### Create User (Indonesia)
 **Request:**
 ```http
 POST http://localhost:4000/api/user
@@ -375,7 +400,8 @@ Content-Type: application/json
 {
     "name": "Budi Santoso",
     "email": "budi@example.com",
-    "age": 20
+    "age": 20,
+    "address": "Indonesia"
 }
 ```
 
@@ -386,7 +412,60 @@ Content-Type: application/json
     "name": "Budi Santoso",
     "email": "budi@example.com",
     "age": 20,
+    "address": "Indonesia",
     "bio": "Budi Santoso, 20 tahun, hobinya rebahan sambil scroll TikTok sampai lupa waktu."
+}
+```
+
+### Create User (Japan)
+**Request:**
+```http
+POST http://localhost:4000/api/user
+Content-Type: application/json
+
+{
+    "name": "Tanaka",
+    "email": "tanaka@example.com",
+    "age": 25,
+    "address": "Japan"
+}
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439012",
+    "name": "Tanaka",
+    "email": "tanaka@example.com",
+    "age": 25,
+    "address": "Japan",
+    "bio": "田中、25歳、趣味はラーメンを食べながらアニメを見ること。"
+}
+```
+
+### Create User (Korea)
+**Request:**
+```http
+POST http://localhost:4000/api/user
+Content-Type: application/json
+
+{
+    "name": "Kim",
+    "email": "kim@example.com",
+    "age": 22,
+    "address": "Korea"
+}
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439013",
+    "name": "Kim",
+    "email": "kim@example.com",
+    "age": 22,
+    "address": "Korea",
+    "bio": "김, 22살, 취미는 치킨 먹으며 K-드라마 정주행하기."
 }
 ```
 
@@ -408,7 +487,90 @@ Content-Type: application/json
     "name": "Budi Santoso",
     "email": "budi@example.com",
     "age": 21,
+    "address": "Indonesia",
     "bio": "Budi Santoso, si 21 tahun yang masih bingung antara lanjut kuliah atau jadi sultan."
+}
+```
+
+### Update User (Pindah Negara)
+**Request:**
+```http
+PUT http://localhost:4000/api/update/user/507f1f77bcf86cd799439011
+Content-Type: application/json
+
+{
+    "address": "France"
+}
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Budi Santoso",
+    "email": "budi@example.com",
+    "age": 21,
+    "address": "France",
+    "bio": "Budi Santoso, 21 ans, adore manger des croissants en regardant Netflix."
+}
+```
+
+### Get All Users
+**Request:**
+```http
+GET http://localhost:4000/api/users
+```
+
+**Response:**
+```json
+[
+    {
+        "_id": "507f1f77bcf86cd799439011",
+        "name": "Budi Santoso",
+        "email": "budi@example.com",
+        "age": 21,
+        "address": "Indonesia",
+        "bio": "Budi Santoso, 21 tahun, hobinya rebahan sambil nonton drakor."
+    },
+    {
+        "_id": "507f1f77bcf86cd799439012",
+        "name": "Tanaka",
+        "email": "tanaka@example.com",
+        "age": 25,
+        "address": "Japan",
+        "bio": "田中、25歳、趣味はラーメンを食べながらアニメを見ること。"
+    }
+]
+```
+
+### Get User by ID
+**Request:**
+```http
+GET http://localhost:4000/api/user/507f1f77bcf86cd799439011
+```
+
+**Response:**
+```json
+{
+    "_id": "507f1f77bcf86cd799439011",
+    "name": "Budi Santoso",
+    "email": "budi@example.com",
+    "age": 21,
+    "address": "Indonesia",
+    "bio": "Budi Santoso, 21 tahun, hobinya rebahan sambil nonton drakor."
+}
+```
+
+### Delete User
+**Request:**
+```http
+DELETE http://localhost:4000/api/delete/user/507f1f77bcf86cd799439011
+```
+
+**Response:**
+```json
+{
+    "message": "User Deleted Successfully"
 }
 ```
 
@@ -436,20 +598,45 @@ gdgoc-crud-nodejs/
 
 ✅ **CRUD Operations** - Create, Read, Update, Delete user  
 ✅ **AI-Generated Bio** - Bio otomatis di-generate oleh Gemini AI  
-✅ **Auto-Regenerate Bio** - Bio di-update otomatis saat name/age berubah  
+✅ **Multi-Language Bio** - Bio di-generate dalam bahasa sesuai negara (address)  
+✅ **Auto-Regenerate Bio** - Bio di-update otomatis saat name/age/address berubah  
 ✅ **Email Validation** - Tidak boleh ada email duplikat  
 ✅ **Error Handling** - Penanganan error yang baik  
 ✅ **Fallback Bio** - Jika AI error, akan menggunakan bio default
 
 ---
 
-## 12. Author
+## 12. Daftar Bahasa yang Didukung
+
+| Negara (Address) | Bahasa Output |
+|------------------|---------------|
+| Indonesia | Bahasa Indonesia |
+| Japan | 日本語 (Jepang) |
+| Korea | 한국어 (Korea) |
+| China | 中文 (Mandarin) |
+| France | Français (Prancis) |
+| Germany | Deutsch (Jerman) |
+| Spain | Español (Spanyol) |
+| Italy | Italiano (Italia) |
+| Netherlands | Nederlands (Belanda) |
+| Portugal | Português (Portugis) |
+| Russia | Русский (Rusia) |
+| Thailand | ไทย (Thailand) |
+| Vietnam | Tiếng Việt (Vietnam) |
+| Malaysia | Bahasa Melayu |
+| United States | English (Inggris) |
+| United Kingdom | English (Inggris) |
+| *dan negara lainnya* | *Bahasa resmi negara tersebut* |
+
+---
+
+## 13. Author
 
 **Wangsit Nursyahada**
 
 ---
 
-## 13. License
+## 14. License
 
 ISC
 

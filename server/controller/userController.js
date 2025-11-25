@@ -7,16 +7,16 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
-async function generateBio(name, age) {
+async function generateBio(name, age, address) {
     try {
-        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun). Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
+        const prompt = `Buat SATU kalimat bio singkat dan lucu untuk ${name} (${age} tahun) yang tinggal di ${address}. Tulis bio dalam bahasa resmi negara ${address}. Langsung tulis bionya saja tanpa pilihan atau penjelasan. Maksimal 15 kata.`;
         
         const result = await model.generateContent(prompt);
         const response = result.response;
         return response.text().trim();
     } catch (error) {
         console.error("Gemini Error:", error.message);
-        return `${name} adalah pengguna berusia ${age} tahun.`;
+        return `${name} adalah pengguna berusia ${age} tahun dan tinggal di ${address}.`;
     }
 }
 
@@ -30,7 +30,7 @@ export const createUser = async (req, res) => {
             return res.status(400).json({errorMessage: "User with this email already exists"});
         }
 
-        const aiGeneratedBio = await generateBio(newUser.name, newUser.age);
+        const aiGeneratedBio = await generateBio(newUser.name, newUser.age, newUser.address);
         newUser.bio = aiGeneratedBio;
 
         const saveData = await newUser.save();
@@ -83,8 +83,9 @@ export const updateUser = async (req, res) => {
         if (req.body.name || req.body.age) {
             const updatedName = req.body.name || userExist.name;
             const updatedAge = req.body.age || userExist.age;
+            const updatedAddress = req.body.address || userExist.address;
             
-            req.body.bio = await generateBio(updatedName, updatedAge);
+            req.body.bio = await generateBio(updatedName, updatedAge, updatedAddress);
         }
 
         const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});
