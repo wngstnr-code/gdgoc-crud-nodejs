@@ -1,11 +1,14 @@
 {
   "name": "crud-api-nodejs-mongodb",
   "version": "1.0.0",
-  "description": "",
+  "description": "REST API CRUD dengan Node.js, MongoDB, dan Gemini AI",
   "license": "ISC",
   "author": "Wangsit Nursyahada",
   "type": "module",
   "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "server": "nodemon server.js",
