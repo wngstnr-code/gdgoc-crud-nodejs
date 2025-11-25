@@ -188,8 +188,9 @@ export const createUser = async (req, res) => {
 ```javascript
 export const getAllUsers = async (req, res) => {
     try {
-        const userData = await User.find();
+        const userData = await User.find(); //Ambil SEMUA dokumen dari collection users
         
+        //Cek apakah data kosong
         if (!userData || userData.length === 0) {
             res.status(404).json({message: "Users data Not Found"});
         }
@@ -206,8 +207,8 @@ export const getAllUsers = async (req, res) => {
 ```javascript
 export const getUserById = async (req, res) => {
     try {
-        const id = req.params.id;
-        const userExist = await User.findById(id);
+        const id = req.params.id; //Ambil ID dari URL parameter (/api/user/:id)
+        const userExist = await User.findById(id); //Cari user berdasarkan _id di MongoDB
 
         if(!userExist) {
             return res.status(404).json({message: "User Not Found"});
@@ -225,8 +226,8 @@ export const getUserById = async (req, res) => {
 ```javascript
 export const updateUser = async (req, res) => {
     try {
-        const id = req.params.id;
-        const userExist = await User.findById(id);
+        const id = req.params.id; //Ambil ID dari URL parameter (/api/user/:id)
+        const userExist = await User.findById(id); //Cari user berdasarkan _id di MongoDB
 
         if(!userExist) {
             return res.status(404).json({message: "User Not Found"});
@@ -234,13 +235,13 @@ export const updateUser = async (req, res) => {
 
         // Regenerate bio jika name atau age berubah
         if (req.body.name || req.body.age) {
-            const updatedName = req.body.name || userExist.name;
-            const updatedAge = req.body.age || userExist.age;
+            const updatedName = req.body.name || userExist.name; //Gunakan nilai baru, atau nilai lama jika tidak ada
+            const updatedAge = req.body.age || userExist.age; //Gunakan nilai baru, atau nilai lama jika tidak ada
             
             req.body.bio = await generateBio(updatedName, updatedAge);
         }
 
-        const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});
+        const updatedData = await User.findByIdAndUpdate(id, req.body, {new:true});//	Return dokumen yang sudah diupdate (bukan yang lama)
         res.status(200).json(updatedData);
 
     } catch (error) {
@@ -253,14 +254,14 @@ export const updateUser = async (req, res) => {
 ```javascript
 export const deleteUser = async (req, res) => {
     try {
-        const id = req.params.id;
-        const userExist = await User.findById(id);
+        const id = req.params.id; //Ambil ID dari URL parameter (/api/user/:id)
+        const userExist = await User.findById(id); //Cari user berdasarkan _id di MongoDB
 
         if(!userExist) {
             return res.status(404).json({message: "User Not Found"});
         }
 
-        await User.findByIdAndDelete(id);
+        await User.findByIdAndDelete(id); //Cari dan hapus user berdasarkan ID
         res.status(200).json({message: "User Deleted Successfully"});
 
     } catch (error) {
