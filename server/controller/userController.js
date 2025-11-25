@@ -80,7 +80,7 @@ export const updateUser = async (req, res) => {
             return res.status(404).json({message: "User Not Found"});
         }
 
-        if (req.body.name || req.body.age) {
+        if (req.body.name || req.body.age || req.body.address) {
             const updatedName = req.body.name || userExist.name;
             const updatedAge = req.body.age || userExist.age;
             const updatedAddress = req.body.address || userExist.address;
